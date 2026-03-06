@@ -10,10 +10,9 @@ RUN curl -sS https://getcomposer.org/installer | php -- \
 
 WORKDIR /var/www
 COPY . .
+COPY ca.pem /etc/ssl/certs/aiven-ca.pem
 
 RUN composer install --no-dev --optimize-autoloader
 RUN npm install && npm run build
-
-COPY ca.pem /etc/ssl/certs/aiven-ca.pem
 
 CMD php artisan serve --host=0.0.0.0 --port=${PORT:-8080}

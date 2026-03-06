@@ -510,7 +510,25 @@ public function scanTicket(Request $request)
             'value' => $signature
         ];
 
-        return json_encode($qrData);
+        // Simple load for the scanner to read
+        $minimalPayload = [
+            'version'     => 1,
+            'ticket_type' => 'STANDARD',
+            'ticket_id'   => $ticket->ticket_uuid,
+            'issuer'      => 'METRO_DZ',
+            'expires_at'  => strtotime($ticket->expires_at),
+            'anti_fraud'  => [
+            'nonce' => $ticket->nonce ?? $this->generateNonce(),
+            ],
+        ];
+
+        $signature = $this->generateHmacSignature($minimalPayload);
+        $minimalPayload['signature'] = ['value' => $signature];
+
+        return json_encode($minimalPayload);    
+
+        // Dense QR code hard to read.
+        //return json_encode($qrData);
 
         /*$jsonData = json_encode($qrData, JSON_PRETTY_PRINT);
 
@@ -591,7 +609,24 @@ public function scanTicket(Request $request)
             'value' => $signature
         ];
 
-        return json_encode($qrData);
+        // Simple one.
+        $minimalPayload = [
+            'version'         => 1,
+            'ticket_type'     => 'SUBSCRIPTION',
+            'subscription_id' => $subscription->subscription_uuid ?? 'SUB-' . rand(100000, 999999),
+            'issuer'          => 'METRO_DZ',
+            'anti_fraud'      => [
+            'nonce' => $this->generateHourlyNonce($subscription->id, $currentEpoch),
+            ],
+        ];
+
+        $signature = $this->generateHmacSignature($minimalPayload);
+        $minimalPayload['signature'] = ['value' => $signature];
+
+        return json_encode($minimalPayload);
+
+        // Dense QR code hard to read by scanner.
+        //return json_encode($qrData);
         
         /*$jsonData = json_encode($qrData, JSON_PRETTY_PRINT);
 

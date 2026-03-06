@@ -510,13 +510,15 @@ public function scanTicket(Request $request)
             'value' => $signature
         ];
 
-        $jsonData = json_encode($qrData, JSON_PRETTY_PRINT);
+        return json_encode($qrData);
+
+        /*$jsonData = json_encode($qrData, JSON_PRETTY_PRINT);
 
         return QrCode::size(300)
                      ->format('svg')
                      ->margin(1)
                      ->errorCorrection('H')
-                     ->generate($jsonData);
+                     ->generate($jsonData);*/
     }
 
     // Generate QR code for subscriber
@@ -589,13 +591,15 @@ public function scanTicket(Request $request)
             'value' => $signature
         ];
 
-        $jsonData = json_encode($qrData, JSON_PRETTY_PRINT);
+        return json_encode($qrData);
+        
+        /*$jsonData = json_encode($qrData, JSON_PRETTY_PRINT);
 
         return QrCode::size(300)
                      ->format('svg')
                      ->margin(1)
                      ->errorCorrection('H')
-                     ->generate($jsonData);
+                     ->generate($jsonData);*/
     }
 
     // Decode QR data back to ticket info

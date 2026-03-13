@@ -348,7 +348,7 @@ public function scanTicket(Request $request)
         }
 
         // Check if subscription is valid
-        if (strtotime($subscription->valid_until) < time()) {
+        if (strtotime($subscription->valid_to) < time()) {
             return response()->json(['success' => false, 'message' => "Subscription expired!"]);
         }
 
@@ -366,7 +366,7 @@ public function scanTicket(Request $request)
 
         // Check daily limit
         $ridesToday = DB::table('trips')
-            ->where('user_id', $subscription->user_id)
+            ->where('user_id', $subscription->passenger_id)
             ->whereDate('created_at', today())
             ->count();
 
@@ -383,7 +383,7 @@ public function scanTicket(Request $request)
         // Create trip record
         $tripId = DB::table('trips')->insertGetId([
             'subscription_id' => $subscription->id,
-            'user_id'         => $subscription->user_id,
+            'user_id'         => $subscription->passenger_id,
             'entry_station'   => 'Main Station',
             'entry_time'      => now(),
             'gate_id'         => $gateId,
@@ -517,11 +517,11 @@ public function scanTicket(Request $request)
             ],
             
             'subscription' => [
-                'type' => $subscription->type ?? 'MONTHLY',
+                'type' => $subscription->duration_type ?? 'MONTHLY',
                 'plan_code' => $subscription->plan_code ?? 'MONTHLY_UNLIMITED',
                 'valid_from' => strtotime($subscription->valid_from),
-                'valid_until' => strtotime($subscription->valid_until),
-                'zones' => json_decode($subscription->zones ?? '["A", "B", "C"]')
+                'valid_until' => strtotime($subscription->valid_to),
+                'zones' => ['A', 'B', 'C']
             ],
             
             'qr_rotation' => [

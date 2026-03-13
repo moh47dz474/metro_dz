@@ -17,67 +17,113 @@ class TicketController extends Controller
         return env('TICKET_HMAC_SECRET', '8kN9mP2vL5xR7wQ4tY6zH3jF0bG1nD8cK5sA9eW2rT7uI4oX6vB3mN0pL9qZ5hJ8');
     }
     
-    // Show current ticket or subscription QR — does NOT auto-create
+    // Buy ticket or show current ticket
     public function buyTicket(Request $request)
     {
+        // Step 1: get user from JWT
         $userId = $request->attributes->get('jwt_user_id');
         if (!$userId) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        // Check active subscription first
+        // Step 2: check if user has valid unused ticket
+        $ticket = DB::table('tickets')
+            ->where('user_id', $userId)
+            //->where('passenger_id', $userId)
+            ->where('status', 0)
+            ->where('remaining_trips', '>', 0)
+            ->where(function($query) {
+                $query->whereNull('expires_at')
+                      ->orWhere('expires_at', '>', now());
+            })
+            ->first();
+
+        // Step 3: if no valid ticket, create a new one
+        if (!$ticket) {
+            // Default to single trip ticket (ID = 1)
+            $ticketType = DB::table('ticket_types')->find(1);
+            
+            $payload = $this->generateNewTicket($userId);
+            
+            // Calculate expiry date
+            $expiresAt = now()->addHours($ticketType->validity_hours);
+            
+            // Generate UUID-style ticket ID
+            $ticketUuid = 'TKT-' . Str::uuid();
+            
+            $ticketId = DB::table('tickets')->insertGetId([
+                'ticket_uuid'    => $ticketUuid,
+                'ticket_payload' => $payload,
+                'user_id'        => $userId,
+                'ticket_type_id' => $ticketType->id,
+                'remaining_trips' => $ticketType->trip_count == -1 ? 999 : $ticketType->trip_count,
+                'total_trips'    => $ticketType->trip_count == -1 ? 999 : $ticketType->trip_count,
+                'used_trips'     => 0,
+                'expires_at'     => $expiresAt,
+                'status'         => 0,
+                'nonce'          => $this->generateNonce(),
+                'scan_counter'   => 0,
+                'last_scan_time' => null,
+                'last_gate_id'   => null,
+                'created_at'     => now(),
+            ]);
+
+            $ticket = DB::table('tickets')->where('id', $ticketId)->first();
+        }
+
+        // Get ticket type info
+        $ticketType = DB::table('ticket_types')->find($ticket->ticket_type_id);
+        
+        // Check if user is a subscriber
         $subscription = DB::table('subscriptions')
             ->where('passenger_id', $userId)
             ->where('valid_to', '>', now())
             ->where('status', 'ACTIVE')
             ->first();
-
+        /*$subscription = DB::table('subscriptions')
+            ->where('user_id', $userId)
+            ->where('valid_until', '>', now())
+            ->where('status', 'ACTIVE')
+            ->first();*/
+        
+        // Generate appropriate QR code based on subscriber status
         if ($subscription) {
             $qr = $this->generateSubscriberQrCode($subscription, $userId);
+        } else {
+            $qr = $this->generateNonSubscriberQrCode($ticket, $ticketType);
+        }
+        
+        $decoded = $this->decodeTicket($ticket->ticket_payload);
+        
+        // Convert to actual timestamp
+        $baseTimestamp = strtotime($ticket->created_at);
+        $decoded['timestamp'] = $baseTimestamp;
+
+        // Return JSON for Flutter (API requests), blade view for web browsers
+        if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([
-                'qr_payload'      => $qr,
-                'ticket_id'       => null,
-                'ticket_type'     => null,
-                'remaining_trips' => 999,
-                'trip_number'     => 1,
-                'expires_at'      => $subscription->valid_to,
-                'is_subscriber'   => true,
+                'qr_payload'      => $qr,         // full JSON string Flutter will render as QR
+                'ticket_id'       => $ticket->id,
+                'ticket_type'     => $ticketType,
+                'remaining_trips' => $ticket->remaining_trips,
+                'trip_number'     => $ticket->used_trips + 1,
+                'expires_at'      => $ticket->expires_at,
+                'is_subscriber'   => $subscription !== null,
             ]);
         }
 
-        // Check for a valid purchased ticket (no auto-create)
-        $ticket = DB::table('tickets')
-            ->where('user_id', $userId)
-            ->where('status', 0)
-            ->where('remaining_trips', '>', 0)
-            ->where(function ($query) {
-                $query->whereNull('expires_at')
-                      ->orWhere('expires_at', '>', now());
-            })
-            ->latest('created_at')
-            ->first();
-
-        // No ticket and no subscription
-        if (!$ticket) {
-            return response()->json([
-                'no_ticket' => true,
-                'message'   => 'No active ticket or subscription found.',
-            ]);
-        }
-
-        $ticketType = DB::table('ticket_types')->find($ticket->ticket_type_id);
-        $qr = $this->generateNonSubscriberQrCode($ticket, $ticketType);
-
-        return response()->json([
-            'qr_payload'      => $qr,
-            'ticket_id'       => $ticket->id,
-            'ticket_type'     => $ticketType,
+        return view('ticket_qr', [
+            'qr' => $qr,
+            'decoded' => $decoded,
+            'ticket_id' => $ticket->id,
+            'ticket_type' => $ticketType,
             'remaining_trips' => $ticket->remaining_trips,
-            'trip_number'     => $ticket->used_trips + 1,
-            'expires_at'      => $ticket->expires_at,
-            'is_subscriber'   => false,
+            'trip_number' => $ticket->used_trips + 1,
+            'expires_at' => $ticket->expires_at,
+            'is_subscriber' => $subscription !== null,
         ]);
     }
+
     // Scan ticket and mark as used
     # REPLACE the scanTicket() method in your TicketController with this:
 

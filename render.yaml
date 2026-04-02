@@ -2,10 +2,12 @@ services:
   - type: web
     name: metro_dz
     env: docker
+    plan: free
     healthCheckPath: /api/health
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: PORT
-        value: 8080
+        value: 10000
       - key: APP_ENV
         value: production
       - key: APP_KEY

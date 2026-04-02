@@ -15,4 +15,4 @@ COPY ca.pem /etc/ssl/certs/aiven-ca.pem
 RUN composer install --no-dev --optimize-autoloader
 RUN npm install && npm run build
 
-CMD php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
+CMD php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
